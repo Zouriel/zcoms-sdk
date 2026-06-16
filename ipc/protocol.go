@@ -34,6 +34,9 @@ type Request struct {
 	ChatID     int64   `json:"chat_id,omitempty"`
 	MessageIDs []int64 `json:"message_ids,omitempty"`
 
+	// subscribe: which event stream to receive ("bridge" | "errands").
+	Role string `json:"role,omitempty"`
+
 	// Errand ops.
 	Brief     string `json:"brief,omitempty"`
 	Deliver   bool   `json:"deliver,omitempty"`
@@ -62,6 +65,20 @@ type UnreadItem struct {
 	When   int64  `json:"when"` // unix seconds
 	ChatID int64  `json:"chat_id"`
 	MsgID  int64  `json:"msg_id"`
+}
+
+// Event is one pushed message on a subscribe stream: an incoming 1:1 Telegram
+// message the daemon routed to this component (bridge or errands).
+type Event struct {
+	Event     string `json:"event"` // "message"
+	ChatID    int64  `json:"chat_id"`
+	UserID    int64  `json:"user_id"`
+	Sender    string `json:"sender"`
+	Text      string `json:"text"`
+	Kind      string `json:"kind"`            // tdlib content type, e.g. "messageText"
+	File      string `json:"file,omitempty"`  // local path if media was downloaded
+	MessageID int64  `json:"message_id"`
+	Date      int64  `json:"date"`
 }
 
 // Response is the daemon's reply to a Request.
