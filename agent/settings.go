@@ -1,8 +1,6 @@
 package agent
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -118,45 +116,25 @@ const settingsFile = "agent-settings.json"
 // LoadOrSeedSettings reads agent-settings.json, creating a disabled placeholder
 // on first run.
 func LoadOrSeedSettings() (Settings, string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return Settings{}, "", err
-	}
-	path := filepath.Join(dir, settingsFile)
-
+	path, _ := configFilePath()
+	dir, _ := DefaultAppDir()
 	home, _ := os.UserHomeDir()
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		seed := Settings{
+
+	var settings Settings
+	found, err := loadSection("settings", &settings)
+	if err != nil {
+		return Settings{}, path, err
+	}
+	if !found {
+		settings = Settings{
 			MainUser:         "@your_username",
 			AutoReplyEnabled: false,
 			AutoReply:        "Message received — the owner will be notified shortly.",
-			Triage: TriageSettings{
-				Enabled:  false,
-				Schedule: "1h",
-				Dir:      home,
-			},
-			WhatsApp: WhatsAppSettings{
-				Enabled:         false,
-				Socket:          filepath.Join(dir, "wa.sock"),
-				MarkReadOnReply: false,
-				ReadReceipts:    false,
-			},
+			Triage:           TriageSettings{Enabled: false, Schedule: "1h", Dir: home},
+			WhatsApp:         WhatsAppSettings{Enabled: false, Socket: filepath.Join(dir, "wa.sock")},
 		}
-		if err := writeJSON(path, seed); err != nil {
-			return Settings{}, path, err
-		}
-		return seed, path, nil
-	}
-	if err != nil {
-		return Settings{}, path, err
-	}
-
-	_ = os.Chmod(path, 0o600)
-
-	var settings Settings
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return Settings{}, path, err
+		_ = saveSection("settings", settings)
+		return settings, path, nil
 	}
 	if settings.Triage.Schedule == "" && settings.Triage.EveryMinutes == 0 {
 		settings.Triage.Schedule = "1h"
@@ -170,12 +148,8 @@ func LoadOrSeedSettings() (Settings, string, error) {
 	return settings, path, nil
 }
 
-// SaveSettings writes agent-settings.json.
+// SaveSettings writes the settings section of config.json.
 func SaveSettings(s Settings) (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, settingsFile)
-	return path, writeJSON(path, s)
+	path, _ := configFilePath()
+	return path, saveSection("settings", s)
 }

@@ -1,11 +1,7 @@
 package agent
 
 import (
-	"encoding/json"
-	"errors"
-	"os"
 	"os/exec"
-	"path/filepath"
 )
 
 // AgentConfig selects which backend handles which task (agents.json).
@@ -100,29 +96,16 @@ func (c AgentConfig) For(task string, override Backend) Backend {
 // LoadOrSeedAgents reads agents.json, seeding it with the detected default on
 // first run.
 func LoadOrSeedAgents() (AgentConfig, string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return AgentConfig{}, "", err
-	}
-	path := filepath.Join(dir, agentsFile)
-
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		seed := AgentConfig{Default: DefaultAgent(), Tasks: map[string]Backend{}}
-		if err := writeJSON(path, seed); err != nil {
-			return AgentConfig{}, path, err
-		}
-		return seed, path, nil
-	}
-	if err != nil {
-		return AgentConfig{}, path, err
-	}
-
-	_ = os.Chmod(path, 0o600)
-
+	path, _ := configFilePath()
 	var cfg AgentConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	found, err := loadSection("agents", &cfg)
+	if err != nil {
 		return AgentConfig{}, path, err
+	}
+	if !found {
+		cfg = AgentConfig{Default: DefaultAgent(), Tasks: map[string]Backend{}}
+		_ = saveSection("agents", cfg)
+		return cfg, path, nil
 	}
 	if cfg.Tasks == nil {
 		cfg.Tasks = map[string]Backend{}
@@ -133,12 +116,8 @@ func LoadOrSeedAgents() (AgentConfig, string, error) {
 	return cfg, path, nil
 }
 
-// SaveAgents writes the agent config back to agents.json.
+// SaveAgents writes the agents section of config.json.
 func SaveAgents(cfg AgentConfig) (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, agentsFile)
-	return path, writeJSON(path, cfg)
+	path, _ := configFilePath()
+	return path, saveSection("agents", cfg)
 }

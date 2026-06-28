@@ -6,7 +6,6 @@ package agent
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -149,64 +148,36 @@ func ensureStagingDir() (string, error) {
 // LoadOrSeedLocations reads agent-locations.json, creating a placeholder file on
 // first run so the user has something to edit.
 func LoadOrSeedLocations() (Locations, string, error) {
-	dir, err := configDir()
+	path, _ := configFilePath()
+	var locations Locations
+	found, err := loadSection("locations", &locations)
 	if err != nil {
-		return nil, "", err
+		return nil, path, err
 	}
-	path := filepath.Join(dir, locationsFile)
-
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		seed := Locations{
+	if !found {
+		locations = Locations{
 			"example":       {Path: "/absolute/path/to/a/project"},
 			"prod-readonly": {Path: "/absolute/path/to/prod", MaxRole: RoleRead},
 		}
-		if err := writeJSON(path, seed); err != nil {
-			return nil, path, err
-		}
-		return seed, path, nil
-	}
-	if err != nil {
-		return nil, path, err
-	}
-
-	_ = os.Chmod(path, 0o600) // may contain paths you'd rather not expose to other local users
-
-	var locations Locations
-	if err := json.Unmarshal(data, &locations); err != nil {
-		return nil, path, err
+		_ = saveSection("locations", locations)
 	}
 	return locations, path, nil
 }
 
-// LoadOrSeedAllowlist reads agent-allowlist.json, creating a placeholder on first
-// run. Entries with an invalid/empty role are dropped.
+// LoadOrSeedAllowlist reads the allowlist section, creating a placeholder on
+// first run. Entries with an invalid/empty role are dropped.
 func LoadOrSeedAllowlist() (Allowlist, string, error) {
-	dir, err := configDir()
+	path, _ := configFilePath()
+	var raw Allowlist
+	found, err := loadSection("allowlist", &raw)
 	if err != nil {
-		return nil, "", err
+		return nil, path, err
 	}
-	path := filepath.Join(dir, allowlistFile)
-
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+	if !found {
 		seed := Allowlist{"@your_username": {Role: RoleFull, Locations: []string{"*"}}}
-		if err := writeJSON(path, seed); err != nil {
-			return nil, path, err
-		}
+		_ = saveSection("allowlist", seed)
 		return seed, path, nil
 	}
-	if err != nil {
-		return nil, path, err
-	}
-
-	_ = os.Chmod(path, 0o600) // the allowlist decides who can drive Claude — keep it owner-only
-
-	var raw Allowlist
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, path, err
-	}
-
 	cleaned := Allowlist{}
 	for username, entry := range raw {
 		if !entry.Role.valid() {
@@ -220,24 +191,16 @@ func LoadOrSeedAllowlist() (Allowlist, string, error) {
 	return cleaned, path, nil
 }
 
-// SaveLocations writes agent-locations.json.
+// SaveLocations writes the locations section of config.json.
 func SaveLocations(l Locations) (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, locationsFile)
-	return path, writeJSON(path, l)
+	path, _ := configFilePath()
+	return path, saveSection("locations", l)
 }
 
-// SaveAllowlist writes agent-allowlist.json.
+// SaveAllowlist writes the allowlist section of config.json.
 func SaveAllowlist(a Allowlist) (string, error) {
-	dir, err := configDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, allowlistFile)
-	return path, writeJSON(path, a)
+	path, _ := configFilePath()
+	return path, saveSection("allowlist", a)
 }
 
 // SortedLocationNames returns location names in stable alphabetical order so the
